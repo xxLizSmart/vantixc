@@ -1,0 +1,106 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-duration: 300ms;
+    transition-timing-function: ease-in-out;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Light Mode (Default) */
+  :root,
+  .light {
+    --bg-primary: #F8FAFC;
+    --bg-secondary: #FFFFFF;
+    --bg-surface: #FFFFFF;
+    --border-color: #E2E8F0;
+    --text-primary: #1A1A1A;
+    --text-secondary: #64748B;
+    --accent: #00EBFF;
+    --accent-hover: #00D4E6;
+  }
+
+  .light body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+  }
+
+  /* Dark Mode */
+  .dark {
+    --bg-primary: #000000;
+    --bg-secondary: #121212;
+    --bg-surface: #1E1E1E;
+    --border-color: #2A2A2A;
+    --text-primary: #FFFFFF;
+    --text-secondary: #B0B0B0;
+    --accent: #00EBFF;
+    --accent-hover: #16E2F5;
+  }
+
+  .dark body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+  }
+
+  /* Scrollbar Styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #555;
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: #444;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: #666;
+  }
+}
+
+@layer components {
+  /* Bitget Themed Buttons */
+  .btn-primary {
+    @apply bg-bitget-cyan hover:bg-bitget-cyan-dark text-black font-semibold px-6 py-3 rounded-lg transition-all duration-300;
+  }
+
+  .btn-secondary {
+    @apply bg-transparent border-2 border-bitget-cyan text-bitget-cyan hover:bg-bitget-cyan hover:text-black font-semibold px-6 py-3 rounded-lg transition-all duration-300;
+  }
+
+  /* Theme-aware Cards */
+  .card {
+    @apply bg-light-surface dark:bg-dark-surface border border-light-border dark:border-dark-border rounded-xl p-6 transition-theme duration-300;
+  }
+
+  /* Theme-aware Inputs */
+  .input {
+    @apply w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:ring-2 focus:ring-bitget-cyan transition-theme duration-300;
+  }
+}
