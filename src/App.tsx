@@ -2,6 +2,7 @@ import { useState, lazy, Suspense, useEffect, useRef } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import Navigation from './components/Navigation';
 import SupportChat from './components/SupportChat';
+import MaintenanceModal from './components/MaintenanceModal';
 
 const LandingPage  = lazy(() => import('./pages/LandingPage'));
 const AuthPage     = lazy(() => import('./pages/AuthPage'));
@@ -105,6 +106,9 @@ function App() {
 
       {/* Always-visible support chat bubble */}
       <SupportChat />
+
+      {/* Service stability announcement — shown once per session */}
+      <MaintenanceModal />
     </div>
   );
 }
