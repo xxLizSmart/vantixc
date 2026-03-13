@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { User } from '@supabase/supabase-js';
-import { supabase, Profile } from '../lib/supabase';
+import { supabase, Profile, toNumber } from '../lib/supabase';
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
@@ -10,101 +11,226 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updateProfileLocally: (updates: Partial<Profile>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function normalizeProfile(data: any): Profile {
+  return {
+    ...data,
+    btc_balance:  toNumber(data.btc_balance),
+    eth_balance:  toNumber(data.eth_balance),
+    usdc_balance: toNumber(data.usdc_balance),
+    usdt_balance: toNumber(data.usdt_balance),
+    xrp_balance:  toNumber(data.xrp_balance),
+    sol_balance:  toNumber(data.sol_balance),
+  } as Profile;
+}
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser]       = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
-    console.log('Fetching profile for user:', userId);
+  const fetchProfile = async (userId: string): Promise<Profile | null> => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+        if (error) {
+          console.error(`[AuthContext] fetchProfile attempt ${attempt + 1} error:`, error.message);
+        } else if (data) {
+          return normalizeProfile(data);
+        } else {
+          console.warn('[AuthContext] No profile row for user:', userId);
+        }
+      } catch (err) {
+        console.error(`[AuthContext] fetchProfile attempt ${attempt + 1} threw:`, err);
+      }
 
-    if (error) {
-      console.error('Error fetching profile:', error);
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint
-      });
-      return null;
+      if (attempt < 1) await new Promise(r => setTimeout(r, 600));
     }
+    return null;
+  };
 
-    console.log('Profile fetched successfully:', data);
-    console.log('Is admin?', data?.is_admin);
-
-    return data;
+  const updateProfileLocally = (updates: Partial<Profile>) => {
+    setProfile(prev => prev ? { ...prev, ...updates } : prev);
   };
 
   const refreshProfile = async () => {
-    if (user) {
-      const profileData = await fetchProfile(user.id);
-      setProfile(profileData);
+    if (!user) return;
+    const data = await fetchProfile(user.id);
+    if (data) setProfile(data);
+  };
+
+  // ── Realtime profile subscription ─────────────────────────────────────────
+  const profileChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  const subscribeToProfile = (userId: string) => {
+    if (profileChannelRef.current) {
+      supabase.removeChannel(profileChannelRef.current);
+      profileChannelRef.current = null;
+    }
+    const channel = supabase
+      .channel(`profile_${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
+        async () => {
+          const fresh = await fetchProfile(userId);
+          if (fresh) setProfile(fresh);
+        }
+      )
+      .subscribe();
+    profileChannelRef.current = channel;
+  };
+
+  const unsubscribeFromProfile = () => {
+    if (profileChannelRef.current) {
+      supabase.removeChannel(profileChannelRef.current);
+      profileChannelRef.current = null;
     }
   };
 
+  // ── Session initialisation ────────────────────────────────────────────────
+  const activeUserIdRef  = useRef<string | null>(null);
+  const profileFetchedRef = useRef(false);
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        (async () => {
-          const profileData = await fetchProfile(session.user.id);
-          setProfile(profileData);
-          setLoading(false);
-        })();
-      } else {
-        setLoading(false);
-      }
-    });
+    let cancelled = false;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    const safetyTimer = setTimeout(() => {
+      console.warn('[AuthContext] safety timeout — forcing loading=false');
+      if (!cancelled) setLoading(false);
+    }, 8000);
+
+    const resolveUser = async (currentUser: User) => {
+      // Dedup: INITIAL_SESSION and SIGNED_IN both fire on reload for the same
+      // user — only the first one should do the work.
+      if (activeUserIdRef.current === currentUser.id) return;
+      activeUserIdRef.current = currentUser.id;
+      profileFetchedRef.current = false;
+
+      if (!cancelled) setUser(currentUser);
+
+      const p = await fetchProfile(currentUser.id);
+
+      if (cancelled) return;
+      if (activeUserIdRef.current !== currentUser.id) return;
+
+      if (p) {
+        profileFetchedRef.current = true;
+        setProfile(p);
+      }
+      subscribeToProfile(currentUser.id);
+      setLoading(false);
+      clearTimeout(safetyTimer);
+    };
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (cancelled) return;
+
+      console.log('[AuthContext] event:', event, '| user:', session?.user?.id ?? 'none');
+
+      if (event === 'TOKEN_REFRESHED') {
+        // Rescue: if initial fetch failed due to expired JWT, retry now
+        if (session?.user && !profileFetchedRef.current) {
+          console.log('[AuthContext] TOKEN_REFRESHED rescue — retrying fetchProfile');
+          const p = await fetchProfile(session.user.id);
+          if (p && !cancelled && activeUserIdRef.current === session.user.id) {
+            profileFetchedRef.current = true;
+            setProfile(p);
+            setLoading(false);
+            clearTimeout(safetyTimer);
+          }
+        }
+        return;
+      }
+
       if (session?.user) {
-        (async () => {
-          const profileData = await fetchProfile(session.user.id);
-          setProfile(profileData);
-        })();
+        await resolveUser(session.user);
       } else {
+        activeUserIdRef.current = null;
+        profileFetchedRef.current = false;
+        setUser(null);
         setProfile(null);
+        unsubscribeFromProfile();
+        setLoading(false);
+        clearTimeout(safetyTimer);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      clearTimeout(safetyTimer);
+      subscription.unsubscribe();
+      unsubscribeFromProfile();
+    };
   }, []);
 
-  const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+  // ── Auth actions ───────────────────────────────────────────────────────────
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
   };
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  const signUp = async (email: string, password: string) => {
+    const { data: rpcData, error: rpcError } = await supabase
+      .rpc('register_user', { p_email: email, p_password: password });
+
+    if (!rpcError && rpcData) {
+      const result = rpcData as { success?: boolean; error?: string; user_id?: string };
+      if (result.error) {
+        if (result.error.includes('already registered') || result.error.includes('unique')) {
+          throw new Error('User already registered');
+        }
+        throw new Error(result.error);
+      }
+      if (result.success && result.user_id) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInError) throw signInError;
+        return;
+      }
+    }
+
+    console.warn('[AuthContext] register_user RPC not found, falling back to standard signUp');
+    const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;
+
+    const userId = data.user?.id ?? data.session?.user?.id;
+    if (userId) {
+      await supabase.from('profiles').upsert({
+        id: userId,
+        username: email.split('@')[0],
+        btc_balance: 0, eth_balance: 0, usdc_balance: 0,
+        usdt_balance: 0, xrp_balance: 0, sol_balance: 0,
+        kyc_status: 'not_verified',
+      }, { onConflict: 'id', ignoreDuplicates: true });
+    }
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    activeUserIdRef.current = null;
+    setUser(null);
     setProfile(null);
+    unsubscribeFromProfile();
+    const { error } = await supabase.auth.signOut();
+    if (error) console.error('[AuthContext] signOut error:', error.message);
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{
+      user, profile, loading,
+      signUp, signIn, signOut,
+      refreshProfile, updateProfileLocally,
+    }}>
       {children}
     </AuthContext.Provider>
   );
@@ -112,8 +238,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 }
