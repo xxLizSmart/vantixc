@@ -10,20 +10,31 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+function safeLocalStorage(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+
+function safeMatchMedia(query: string): boolean {
+  try { return window.matchMedia(query).matches; } catch { return false; }
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
-    const stored = localStorage.getItem('bitget-theme');
+    const stored = safeLocalStorage('vantix-theme');
     if (stored === 'light' || stored === 'dark') {
       return stored;
     }
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    // Vantix is dark-first — default to dark unless OS explicitly prefers light
+    return safeMatchMedia('(prefers-color-scheme: light)') ? 'light' : 'dark';
   });
 
   useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-    root.classList.add(theme);
-    localStorage.setItem('bitget-theme', theme);
+    try {
+      const root = window.document.documentElement;
+      root.classList.remove('light', 'dark');
+      root.classList.add(theme);
+      localStorage.setItem('vantix-theme', theme);
+    } catch { /* localStorage blocked in some iframe contexts */ }
   }, [theme]);
 
   const toggleTheme = () => {

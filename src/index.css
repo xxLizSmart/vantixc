@@ -25,7 +25,6 @@
   :root,
   .light {
     --bg-primary: #F8FAFC;
-    --bg-secondary: #FFFFFF;
     --bg-surface: #FFFFFF;
     --border-color: #E2E8F0;
     --text-primary: #1A1A1A;
@@ -39,14 +38,14 @@
     color: var(--text-primary);
   }
 
-  /* Dark Mode */
+  /* Dark Mode — Vantix Neo-Digital */
   .dark {
-    --bg-primary: #000000;
-    --bg-secondary: #121212;
-    --bg-surface: #1E1E1E;
-    --border-color: #2A2A2A;
-    --text-primary: #FFFFFF;
-    --text-secondary: #B0B0B0;
+    --bg-primary: #080808;
+    --bg-surface: #3a3434;
+    --bg-surface-deep: #2e2929;
+    --border-color: rgba(0,235,255,0.15);
+    --text-primary: #F5F5F0;
+    --text-secondary: #C0B8B8;
     --accent: #00EBFF;
     --accent-hover: #16E2F5;
   }
@@ -56,51 +55,80 @@
     color: var(--text-primary);
   }
 
-  /* Scrollbar Styling */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 4px;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: #555;
-  }
-
-  .dark ::-webkit-scrollbar-thumb {
-    background: #444;
-  }
-
-  .dark ::-webkit-scrollbar-thumb:hover {
-    background: #666;
-  }
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #666; }
+  .dark ::-webkit-scrollbar-thumb { background: rgba(0,235,255,0.2); }
+  .dark ::-webkit-scrollbar-thumb:hover { background: rgba(0,235,255,0.4); }
 }
 
 @layer components {
-  /* Bitget Themed Buttons */
+  /* Vantix Buttons */
   .btn-primary {
-    @apply bg-bitget-cyan hover:bg-bitget-cyan-dark text-black font-semibold px-6 py-3 rounded-lg transition-all duration-300;
+    @apply font-semibold px-6 py-3 rounded-lg transition-all duration-300;
+    background: #00EBFF;
+    color: #080808;
+    box-shadow: 0 0 24px rgba(0,235,255,0.3);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 0 40px rgba(0,235,255,0.5);
   }
 
   .btn-secondary {
-    @apply bg-transparent border-2 border-bitget-cyan text-bitget-cyan hover:bg-bitget-cyan hover:text-black font-semibold px-6 py-3 rounded-lg transition-all duration-300;
+    @apply font-semibold px-6 py-3 rounded-lg transition-all duration-300;
+    background: transparent;
+    color: #00EBFF;
+    border: 1px solid rgba(0,235,255,0.4);
+  }
+  .btn-secondary:hover {
+    background: rgba(0,235,255,0.06);
+    border-color: #00EBFF;
   }
 
   /* Theme-aware Cards */
   .card {
-    @apply bg-light-surface dark:bg-dark-surface border border-light-border dark:border-dark-border rounded-xl p-6 transition-theme duration-300;
+    @apply bg-light-surface dark:bg-dark-surface border border-light-border dark:border-dark-border rounded-xl p-6;
   }
 
-  /* Theme-aware Inputs */
-  .input {
-    @apply w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:ring-2 focus:ring-bitget-cyan transition-theme duration-300;
+  /* Iridescent divider */
+  .iridescent-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #FFC0CB44, #E6E6FA66, #B0E0E699, #E6E6FA66, #FFC0CB44, transparent);
+  }
+
+  /* Iridescent hover glow on containers */
+  .iridescent-glow {
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .iridescent-glow:hover {
+    border-color: rgba(0,235,255,0.4) !important;
+    box-shadow: 0 0 32px rgba(0,235,255,0.06), inset 0 0 0 1px rgba(176,224,230,0.06);
+  }
+
+  /* Film grain utility */
+  .film-grain {
+    position: relative;
+  }
+  .film-grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    background-size: 128px 128px;
+  }
+
+  /* Scan lines utility */
+  .scanlines {
+    position: relative;
+  }
+  .scanlines::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 4px);
   }
 }

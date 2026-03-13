@@ -35,6 +35,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // ── Fetch profile — with one automatic retry ──────────────────────────────
+  // On page reload, the Supabase JWT may not be fully verified yet when the
+  // first fetch fires, causing RLS to reject it. A single 600 ms retry
+  // covers the vast majority of transient cases without noticeable delay.
   const fetchProfile = async (userId: string): Promise<Profile | null> => {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
@@ -55,11 +59,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error(`[AuthContext] fetchProfile attempt ${attempt + 1} threw:`, err);
       }
 
+      // Wait before retrying
       if (attempt < 1) await new Promise(r => setTimeout(r, 600));
     }
     return null;
   };
 
+  // Optimistic in-memory update — no DB call needed
   const updateProfileLocally = (updates: Partial<Profile>) => {
     setProfile(prev => prev ? { ...prev, ...updates } : prev);
   };
@@ -84,6 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
         async () => {
+          // Always re-fetch the full row — Realtime payloads can omit columns
+          // that RLS restricts, so payload.new may be missing is_admin etc.
           const fresh = await fetchProfile(userId);
           if (fresh) setProfile(fresh);
         }
@@ -101,19 +109,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Session initialisation ────────────────────────────────────────────────
   const activeUserIdRef  = useRef<string | null>(null);
+  // Tracks whether we successfully fetched a profile for the current user.
+  // Used by the TOKEN_REFRESHED rescue path: if the initial fetch fired
+  // before the JWT was refreshed (RLS returned nothing), we retry here.
   const profileFetchedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
 
+    // Safety net: if everything above fails, don't block the UI forever
     const safetyTimer = setTimeout(() => {
       console.warn('[AuthContext] safety timeout — forcing loading=false');
       if (!cancelled) setLoading(false);
     }, 8000);
 
+    // ── Shared logic: fetch profile and finalise loading ───────────────────
     const resolveUser = async (currentUser: User) => {
-      // Dedup: INITIAL_SESSION and SIGNED_IN both fire on reload for the same
-      // user — only the first one should do the work.
+      // Dedup: don't run two concurrent fetches for the same user.
+      // On reload Supabase fires INITIAL_SESSION then SIGNED_IN for the same
+      // user — we only want the first one to do the work.
       if (activeUserIdRef.current === currentUser.id) return;
       activeUserIdRef.current = currentUser.id;
       profileFetchedRef.current = false;
@@ -123,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const p = await fetchProfile(currentUser.id);
 
       if (cancelled) return;
-      if (activeUserIdRef.current !== currentUser.id) return;
+      if (activeUserIdRef.current !== currentUser.id) return; // superseded
 
       if (p) {
         profileFetchedRef.current = true;
@@ -140,7 +154,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('[AuthContext] event:', event, '| user:', session?.user?.id ?? 'none');
 
       if (event === 'TOKEN_REFRESHED') {
-        // Rescue: if initial fetch failed due to expired JWT, retry now
+        // Rescue: initial fetch may have run with an expired JWT (RLS returned
+        // nothing). Now that the token is fresh, retry if we still have no profile.
         if (session?.user && !profileFetchedRef.current) {
           console.log('[AuthContext] TOKEN_REFRESHED rescue — retrying fetchProfile');
           const p = await fetchProfile(session.user.id);
@@ -157,6 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session?.user) {
         await resolveUser(session.user);
       } else {
+        // Signed out / no session
         activeUserIdRef.current = null;
         profileFetchedRef.current = false;
         setUser(null);
@@ -179,9 +195,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    // onAuthStateChange SIGNED_IN fires → resolveUser → profile loaded
   };
 
   const signUp = async (email: string, password: string) => {
+    // Strategy 1: SECURITY DEFINER RPC — skips email confirmation
     const { data: rpcData, error: rpcError } = await supabase
       .rpc('register_user', { p_email: email, p_password: password });
 
@@ -200,6 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Strategy 2: standard signUp fallback
     console.warn('[AuthContext] register_user RPC not found, falling back to standard signUp');
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;

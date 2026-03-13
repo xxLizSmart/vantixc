@@ -1,4 +1,4 @@
-import { useEffect, useState, memo } from 'react';
+import { useEffect, useState, useRef, memo } from 'react';
 import { TrendingUp, Target, DollarSign, Percent } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,33 +11,33 @@ function TradingStats() {
     totalProfit: 0,
     bestTrade: 0,
   });
+  const fetchedForRef = useRef<string | null>(null);
 
   useEffect(() => {
-    loadStats();
-  }, [profile]);
+    const id = profile?.id;
+    if (!id) return;
+    if (fetchedForRef.current === id) return;
+    fetchedForRef.current = id;
+    loadStats(id);
+  }, [profile?.id]);
 
-  const loadStats = async () => {
-    if (!profile) return;
-
+  const loadStats = async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from('trades')
-        .select('*')
-        .eq('user_id', profile.id)
+        .select('outcome, profit_loss')
+        .eq('user_id', userId)
         .neq('outcome', 'pending');
 
-      if (error) {
-        console.error('Error loading stats:', error);
-        return;
-      }
+      if (error) { console.error('Error loading stats:', error); return; }
 
-      if (data) {
+      if (data && data.length > 0) {
         const totalTrades = data.length;
         const wins = data.filter((t) => t.outcome === 'win').length;
         const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
-        const totalProfit = data.reduce((sum, t) => sum + t.profit_loss, 0);
-        const bestTrade = Math.max(...data.map((t) => t.profit_loss), 0);
-
+        const profits = data.map((t) => Number(t.profit_loss) || 0);
+        const totalProfit = profits.reduce((sum, v) => sum + v, 0);
+        const bestTrade = Math.max(...profits, 0);
         setStats({ totalTrades, winRate, totalProfit, bestTrade });
       }
     } catch (err) {

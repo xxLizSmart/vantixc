@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vantix — Database Setup SQL</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #080808; color: #F5F5F0; font-family: system-ui, sans-serif; padding: 32px 16px 64px; }
+    .container { max-width: 860px; margin: 0 auto; }
+    h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 6px; color: #00EBFF; }
+    p  { font-size: 0.9rem; color: #C0B8B8; margin-bottom: 24px; }
+    .card { background: #1a1414; border: 1px solid rgba(0,235,255,0.2); border-radius: 14px; overflow: hidden; margin-bottom: 28px; }
+    .card-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid rgba(0,235,255,0.1); background: rgba(0,235,255,0.05); }
+    .card-header span { font-size: 0.85rem; font-weight: 600; color: #00EBFF; letter-spacing: 0.04em; }
+    .copy-btn { display: flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 8px; border: 1px solid rgba(0,235,255,0.35); background: rgba(0,235,255,0.08); color: #00EBFF; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+    .copy-btn:hover { background: rgba(0,235,255,0.18); }
+    .copy-btn.copied { border-color: rgba(74,222,128,0.5); background: rgba(74,222,128,0.12); color: #4ADE80; }
+    pre { padding: 20px; font-size: 0.8rem; line-height: 1.6; overflow-x: auto; white-space: pre; color: #d4cfcf; background: #0d0a0a; max-height: 420px; overflow-y: auto; }
+    .step { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+    .step-num { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: rgba(0,235,255,0.15); border: 1px solid rgba(0,235,255,0.4); color: #00EBFF; font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .step-text { font-size: 0.88rem; color: #C0B8B8; padding-top: 4px; line-height: 1.5; }
+    .step-text strong { color: #F5F5F0; }
+    a { color: #00EBFF; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Vantix Database Setup</h1>
+    <p>Run these two SQL blocks in your Supabase SQL Editor to set up the database.</p>
+
+    <div class="step"><div class="step-num">1</div><div class="step-text">Go to <a href="https://supabase.com/dashboard" target="_blank">supabase.com/dashboard</a> → your project → <strong>SQL Editor</strong> → <strong>New query</strong></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text">Paste and run <strong>Step 1 — Full Schema</strong> below</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text">Create a new query, paste and run <strong>Step 2 — Create Admin</strong></div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-text">Go to <strong>Authentication → Providers → Email</strong> → turn <strong>OFF</strong> "Confirm email" → Save</div></div>
+
+    <!-- STEP 1 -->
+    <div class="card">
+      <div class="card-header">
+        <span>STEP 1 — Full Schema</span>
+        <button class="copy-btn" onclick="copySQL('sql1', this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy SQL
+        </button>
+      </div>
+      <pre id="sql1">-- =====================================================
+-- DROP EXISTING (clean setup)
+-- =====================================================
+DROP TABLE IF EXISTS trade_settings CASCADE;
+DROP TABLE IF EXISTS trades CASCADE;
+DROP TABLE IF EXISTS withdrawals CASCADE;
+DROP TABLE IF EXISTS deposits CASCADE;
+DROP TABLE IF EXISTS kyc_verifications CASCADE;
+DROP TABLE IF EXISTS user_settings CASCADE;
+DROP TABLE IF EXISTS transactions CASCADE;
+DROP TABLE IF EXISTS trade_history CASCADE;
+DROP TABLE IF EXISTS orders CASCADE;
+DROP TABLE IF EXISTS wallets CASCADE;
+DROP TABLE IF EXISTS crypto_prices CASCADE;
+DROP TABLE IF EXISTS profiles CASCADE;
+
+-- =====================================================
+-- CREATE TABLES
+-- =====================================================
+
+CREATE TABLE profiles (
+  id uuid PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
+  username text UNIQUE,
+  avatar_url text,
+  is_admin boolean DEFAULT false,
+  kyc_status text DEFAULT 'not_verified' CHECK (kyc_status IN ('not_verified', 'pending', 'verified')),
+  trading_level text DEFAULT 'beginner',
+  btc_balance numeric(20, 8) DEFAULT 0 CHECK (btc_balance >= 0),
+  eth_balance numeric(20, 8) DEFAULT 0 CHECK (eth_balance >= 0),
+  usdc_balance numeric(20, 8) DEFAULT 0 CHECK (usdc_balance >= 0),
+  usdt_balance numeric(20, 8) DEFAULT 0 CHECK (usdt_balance >= 0),
+  xrp_balance numeric(20, 8) DEFAULT 0 CHECK (xrp_balance >= 0),
+  sol_balance numeric(20, 8) DEFAULT 0 CHECK (sol_balance >= 0),
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE transactions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  type text NOT NULL CHECK (type IN ('deposit', 'withdrawal', 'trade', 'swap')),
+  amount numeric NOT NULL,
+  currency text NOT NULL,
+  status text NOT NULL,
+  transaction_hash text,
+  network text,
+  details jsonb,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE kyc_verifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  full_name text NOT NULL,
+  phone_number text NOT NULL,
+  full_address text NOT NULL,
+  country text NOT NULL,
+  id_number text NOT NULL,
+  id_front_photo_url text NOT NULL,
+  id_back_photo_url text NOT NULL,
+  status text DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  created_at timestamptz DEFAULT now(),
+  reviewed_at timestamptz
+);
+
+CREATE TABLE deposits (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  amount numeric NOT NULL CHECK (amount >= 100),
+  network text NOT NULL CHECK (network IN ('TRC20', 'ERC20', 'ETH', 'BTC')),
+  proof_url text NOT NULL,
+  status text DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  created_at timestamptz DEFAULT now(),
+  reviewed_at timestamptz
+);
+
+CREATE TABLE withdrawals (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  amount numeric NOT NULL CHECK (amount >= 100),
+  currency text NOT NULL CHECK (currency IN ('USDT', 'ETH', 'USDC', 'BTC', 'XRP', 'SOL')),
+  wallet_address text NOT NULL,
+  status text DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  created_at timestamptz DEFAULT now(),
+  reviewed_at timestamptz
+);
+
+CREATE TABLE trades (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  trade_type text NOT NULL CHECK (trade_type IN ('BUY', 'SELL')),
+  amount numeric NOT NULL CHECK (amount > 0),
+  duration integer NOT NULL CHECK (duration IN (30, 60, 90, 120, 150, 180, 210)),
+  outcome text DEFAULT 'pending' CHECK (outcome IN ('pending', 'win', 'loss')),
+  profit_loss numeric DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  completed_at timestamptz
+);
+
+CREATE TABLE trade_settings (
+  duration integer PRIMARY KEY CHECK (duration IN (30, 60, 90, 120, 150, 180, 210)),
+  min_capital numeric NOT NULL DEFAULT 100,
+  win_percentage numeric NOT NULL DEFAULT 20,
+  loss_percentage numeric NOT NULL DEFAULT 100
+);
+
+CREATE TABLE crypto_prices (
+  symbol text PRIMARY KEY,
+  price_usd numeric NOT NULL DEFAULT 0,
+  price_change_24h numeric DEFAULT 0,
+  market_cap numeric DEFAULT 0,
+  volume_24h numeric DEFAULT 0,
+  last_updated timestamptz DEFAULT now()
+);
+
+-- =====================================================
+-- DEFAULT DATA
+-- =====================================================
+
+INSERT INTO trade_settings (duration, min_capital, win_percentage, loss_percentage) VALUES
+  (30,  100,   10.00, 100.00),
+  (60,  1000,  15.00, 100.00),
+  (90,  5000,  20.00, 100.00),
+  (120, 7000,  25.00, 100.00),
+  (150, 10000, 28.00, 100.00),
+  (180, 20000, 30.00, 100.00),
+  (210, 50000, 30.00, 100.00);
+
+INSERT INTO crypto_prices (symbol, price_usd, price_change_24h, market_cap, volume_24h) VALUES
+  ('BTC',  67000.00, 2.5,  1300000000000, 35000000000),
+  ('ETH',  3500.00,  1.8,  420000000000,  18000000000),
+  ('USDT', 1.00,     0.01, 95000000000,   50000000000),
+  ('USDC', 1.00,     0.00, 43000000000,   6000000000),
+  ('XRP',  0.60,     3.2,  32000000000,   1500000000),
+  ('SOL',  180.00,   4.1,  78000000000,   3500000000),
+  ('BNB',  580.00,   1.2,  85000000000,   1200000000),
+  ('ADA',  0.45,    -1.5,  15000000000,   300000000)
+ON CONFLICT (symbol) DO UPDATE SET
+  price_usd = EXCLUDED.price_usd,
+  price_change_24h = EXCLUDED.price_change_24h,
+  last_updated = now();
+
+-- =====================================================
+-- INDEXES
+-- =====================================================
+
+CREATE INDEX idx_transactions_user ON transactions(user_id, created_at DESC);
+CREATE INDEX idx_trades_user ON trades(user_id, created_at DESC);
+CREATE INDEX idx_deposits_user ON deposits(user_id, created_at DESC);
+CREATE INDEX idx_withdrawals_user ON withdrawals(user_id, created_at DESC);
+CREATE INDEX idx_kyc_user ON kyc_verifications(user_id);
+
+-- =====================================================
+-- ROW LEVEL SECURITY
+-- =====================================================
+
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE kyc_verifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE deposits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE withdrawals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE trade_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE crypto_prices ENABLE ROW LEVEL SECURITY;
+
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS boolean AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true
+  );
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
+-- Profiles
+CREATE POLICY "profiles_select_own"   ON profiles FOR SELECT TO authenticated USING (auth.uid() = id);
+CREATE POLICY "profiles_update_own"   ON profiles FOR UPDATE TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+CREATE POLICY "profiles_insert_own"   ON profiles FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
+CREATE POLICY "profiles_admin_select" ON profiles FOR SELECT TO authenticated USING (is_admin());
+CREATE POLICY "profiles_admin_update" ON profiles FOR UPDATE TO authenticated USING (is_admin()) WITH CHECK (is_admin());
+CREATE POLICY "profiles_admin_delete" ON profiles FOR DELETE TO authenticated USING (is_admin());
+
+-- Transactions
+CREATE POLICY "transactions_own"    ON transactions FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "transactions_insert" ON transactions FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "transactions_admin"  ON transactions FOR ALL    TO authenticated USING (is_admin()) WITH CHECK (is_admin());
+
+-- KYC
+CREATE POLICY "kyc_own"    ON kyc_verifications FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "kyc_insert" ON kyc_verifications FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "kyc_admin"  ON kyc_verifications FOR ALL    TO authenticated USING (is_admin()) WITH CHECK (is_admin());
+
+-- Deposits
+CREATE POLICY "deposits_own"    ON deposits FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "deposits_insert" ON deposits FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "deposits_admin"  ON deposits FOR ALL    TO authenticated USING (is_admin()) WITH CHECK (is_admin());
+
+-- Withdrawals
+CREATE POLICY "withdrawals_own"    ON withdrawals FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "withdrawals_insert" ON withdrawals FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "withdrawals_admin"  ON withdrawals FOR ALL    TO authenticated USING (is_admin()) WITH CHECK (is_admin());
+
+-- Trades
+CREATE POLICY "trades_own"    ON trades FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "trades_insert" ON trades FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "trades_update" ON trades FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "trades_admin"  ON trades FOR ALL    TO authenticated USING (is_admin()) WITH CHECK (is_admin());
+
+-- Trade settings
+CREATE POLICY "trade_settings_read"  ON trade_settings FOR SELECT TO authenticated USING (true);
+CREATE POLICY "trade_settings_admin" ON trade_settings FOR ALL    TO authenticated USING (is_admin()) WITH CHECK (is_admin());
+
+-- Crypto prices
+CREATE POLICY "crypto_prices_read"  ON crypto_prices FOR SELECT TO authenticated USING (true);
+CREATE POLICY "crypto_prices_anon"  ON crypto_prices FOR SELECT TO anon USING (true);
+CREATE POLICY "crypto_prices_admin" ON crypto_prices FOR ALL    TO authenticated USING (is_admin()) WITH CHECK (is_admin());
+
+-- =====================================================
+-- TRIGGERS
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO profiles (id, username, created_at, updated_at)
+  VALUES (NEW.id, NEW.email, now(), now())
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+CREATE OR REPLACE FUNCTION update_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+
+DROP TRIGGER IF EXISTS profiles_updated_at ON profiles;
+CREATE TRIGGER profiles_updated_at
+  BEFORE UPDATE ON profiles
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- =====================================================
+-- ADMIN ACCOUNT FUNCTION
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION create_default_admin()
+RETURNS text AS $$
+DECLARE _uid uuid;
+BEGIN
+  SELECT id INTO _uid FROM auth.users WHERE email = 'admin@vantix.com' LIMIT 1;
+  IF _uid IS NULL THEN
+    INSERT INTO auth.users (
+      id, instance_id, aud, role, email, encrypted_password,
+      email_confirmed_at, created_at, updated_at,
+      raw_app_meta_data, raw_user_meta_data, is_super_admin, confirmation_token
+    ) VALUES (
+      gen_random_uuid(), '00000000-0000-0000-0000-000000000000',
+      'authenticated', 'authenticated', 'admin@vantix.com',
+      crypt('Vantix@2024!', gen_salt('bf')),
+      now(), now(), now(),
+      '{"provider":"email","providers":["email"]}', '{}', false, ''
+    ) RETURNING id INTO _uid;
+  END IF;
+
+  INSERT INTO profiles (id, username, is_admin, kyc_status, created_at, updated_at)
+  VALUES (_uid, 'Admin', true, 'verified', now(), now())
+  ON CONFLICT (id) DO UPDATE SET is_admin = true, username = 'Admin', kyc_status = 'verified';
+
+  RETURN 'Done — admin@vantix.com / Vantix@2024! created successfully';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;</pre>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="card">
+      <div class="card-header">
+        <span>STEP 2 — Create Admin Account</span>
+        <button class="copy-btn" onclick="copySQL('sql2', this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy SQL
+        </button>
+      </div>
+      <pre id="sql2">SELECT create_default_admin();</pre>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="card">
+      <div class="card-header">
+        <span>STEP 3 — Seed Trade Settings (run if Step 1 already ran before)</span>
+        <button class="copy-btn" onclick="copySQL('sql3', this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy SQL
+        </button>
+      </div>
+      <pre id="sql3">-- Fix RLS so admin can insert into trade_settings
+DROP POLICY IF EXISTS "trade_settings_admin" ON trade_settings;
+CREATE POLICY "trade_settings_admin" ON trade_settings
+  FOR ALL TO authenticated USING (is_admin()) WITH CHECK (is_admin());
+
+-- Seed the 7 trading duration tiers
+INSERT INTO trade_settings (duration, min_capital, win_percentage, loss_percentage) VALUES
+  (30,  100,   10, 100),
+  (60,  1000,  15, 100),
+  (90,  5000,  20, 100),
+  (120, 7000,  25, 100),
+  (150, 10000, 28, 100),
+  (180, 20000, 30, 100),
+  (210, 50000, 30, 100)
+ON CONFLICT (duration) DO UPDATE SET
+  min_capital     = EXCLUDED.min_capital,
+  win_percentage  = EXCLUDED.win_percentage,
+  loss_percentage = EXCLUDED.loss_percentage;</pre>
+    </div>
+
+    <!-- STEP 4 — register_user function (fixes email rate limit) -->
+    <div class="card" style="border-color: rgba(251,191,36,0.4);">
+      <div class="card-header" style="background: rgba(251,191,36,0.07); border-bottom-color: rgba(251,191,36,0.2);">
+        <span style="color:#FBbf24;">⚡ STEP 4 — Enable Instant Signup (No Email Required)</span>
+        <button class="copy-btn" onclick="copySQL('sql4', this)" style="border-color: rgba(251,191,36,0.4); color:#FBbf24;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy SQL
+        </button>
+      </div>
+      <pre id="sql4">-- Creates a register_user() RPC that bypasses email confirmation entirely.
+-- Users sign up instantly with no email sent — fixes "email rate limit exceeded".
+
+CREATE OR REPLACE FUNCTION public.register_user(
+  p_email    text,
+  p_password text
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = extensions, public, auth
+AS $$
+DECLARE
+  v_user_id uuid;
+BEGIN
+  IF p_email IS NULL OR p_email = '' THEN
+    RETURN json_build_object('error', 'Email is required');
+  END IF;
+  IF p_password IS NULL OR length(p_password) < 6 THEN
+    RETURN json_build_object('error', 'Password must be at least 6 characters');
+  END IF;
+  IF EXISTS (SELECT 1 FROM auth.users WHERE email = lower(trim(p_email))) THEN
+    RETURN json_build_object('error', 'User already registered');
+  END IF;
+
+  v_user_id := gen_random_uuid();
+
+  INSERT INTO auth.users (
+    id, instance_id, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at,
+    raw_app_meta_data, raw_user_meta_data,
+    is_super_admin, role, aud,
+    confirmation_token, recovery_token,
+    email_change_token_new, email_change
+  ) VALUES (
+    v_user_id,
+    '00000000-0000-0000-0000-000000000000',
+    lower(trim(p_email)),
+    crypt(p_password, gen_salt('bf')),
+    now(),
+    now(), now(),
+    '{"provider":"email","providers":["email"]}',
+    '{}',
+    false, 'authenticated', 'authenticated',
+    '', '', '', ''
+  );
+
+  INSERT INTO public.profiles (
+    id, username,
+    btc_balance, eth_balance, usdc_balance,
+    usdt_balance, xrp_balance, sol_balance,
+    kyc_status, is_admin
+  ) VALUES (
+    v_user_id,
+    split_part(lower(trim(p_email)), '@', 1),
+    0, 0, 0, 0, 0, 0,
+    'not_verified', false
+  ) ON CONFLICT (id) DO NOTHING;
+
+  RETURN json_build_object('success', true, 'user_id', v_user_id::text);
+EXCEPTION WHEN OTHERS THEN
+  RETURN json_build_object('error', SQLERRM);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.register_user(text, text) TO anon, authenticated;</pre>
+    </div>
+
+    <p style="color:#4ADE80; font-size:0.85rem; margin-top: 8px;">
+      ✓ After Step 4 succeeds, users can sign up instantly with no email confirmation required.
+    </p>
+  </div>
+
+    <!-- STEP 5 — Trade Settings migration -->
+    <div class="card" style="border-color:rgba(0,235,255,0.3);">
+      <div class="card-header" style="background:rgba(0,235,255,0.07); border-bottom-color:rgba(0,235,255,0.2);">
+        <span style="color:#00EBFF;">⚙️ STEP 5 — Trade Settings Migration (new columns + seed)</span>
+        <button class="copy-btn" data-target="step5sql">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy SQL
+        </button>
+      </div>
+      <pre id="step5sql">-- Add missing columns to trade_settings
+ALTER TABLE trade_settings
+  ADD COLUMN IF NOT EXISTS label         text,
+  ADD COLUMN IF NOT EXISTS max_capital   numeric DEFAULT 10000,
+  ADD COLUMN IF NOT EXISTS is_enabled    boolean DEFAULT true;
+
+-- Seed / upsert all 8 durations
+INSERT INTO trade_settings (duration, label, min_capital, max_capital, win_percentage, loss_percentage, is_enabled)
+VALUES
+  (30,    '30 Seconds', 1,   500,   82, 100, true),
+  (60,    '1 Minute',   1,   1000,  85, 100, true),
+  (180,   '3 Minutes',  5,   2000,  87, 100, true),
+  (300,   '5 Minutes',  5,   5000,  88, 100, true),
+  (900,   '15 Minutes', 10,  10000, 90, 100, true),
+  (1800,  '30 Minutes', 10,  10000, 92, 100, true),
+  (3600,  '1 Hour',     20,  20000, 93, 100, false),
+  (14400, '4 Hours',    50,  50000, 95, 100, false)
+ON CONFLICT (duration) DO UPDATE SET
+  label           = EXCLUDED.label,
+  min_capital     = EXCLUDED.min_capital,
+  max_capital     = EXCLUDED.max_capital,
+  win_percentage  = EXCLUDED.win_percentage,
+  loss_percentage = EXCLUDED.loss_percentage,
+  is_enabled      = EXCLUDED.is_enabled;
+
+-- RLS: anyone can read, only admin can write
+ALTER TABLE trade_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Admin can manage trade_settings" ON trade_settings;
+CREATE POLICY "Admin can manage trade_settings"
+  ON trade_settings FOR ALL
+  USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true))
+  WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true));
+
+DROP POLICY IF EXISTS "Anyone can read trade_settings" ON trade_settings;
+CREATE POLICY "Anyone can read trade_settings"
+  ON trade_settings FOR SELECT USING (true);</pre>
+    </div>
+
+    <!-- STEP 6 — forced_result on profiles -->
+    <div class="card" style="border-color:rgba(251,191,36,0.3);">
+      <div class="card-header" style="background:rgba(251,191,36,0.07); border-bottom-color:rgba(251,191,36,0.2);">
+        <span style="color:#FBbf24;">🎯 STEP 6 — User Trade Result Override (admin control)</span>
+        <button class="copy-btn" data-target="step6sql" style="border-color:rgba(251,191,36,0.4);color:#FBbf24;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy SQL
+        </button>
+      </div>
+      <pre id="step6sql">-- Add forced_result column to profiles
+-- Values: NULL (normal), 'win', 'loss'
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS forced_result text CHECK (forced_result IN ('win','loss')) DEFAULT NULL;</pre>
+    </div>
+
+  <script>
+    function copySQL(id, btn) {
+      const text = document.getElementById(id).textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.classList.add('copied');
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!`;
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy SQL`;
+        }, 2500);
+      });
+    }
+  </script>
+</body>
+</html>

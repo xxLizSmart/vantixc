@@ -1,0 +1,9 @@
+{
+  "projectId": "44e676e3-6bd2-4042-b973-8e575fae7a07",
+  "createdAt": 1773027622242,
+  "version": "1.0",
+  "startupCommands": [
+    "printf 'VITE_SUPABASE_URL=https://xwtnkxvvxozgjddwrvon.supabase.co\\nVITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh3dG5reHZ2eG96Z2pkZHdydm9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMzk4NDgsImV4cCI6MjA4ODYxNTg0OH0.GvQxippdZsDAvK_sdxOucSDodrmDO5Op0DSAXxbLi-I\\nVITE_TELEGRAM_BOT_TOKEN=8789118557:AAG2t7H5SxwmiluZYkhjVvx9B8fg_1Hq6V0\\nVITE_TELEGRAM_CHAT_ID=5801671702\\n' > .env.local; npm ci; npm run build; npm run preview -- --host 0.0.0.0 --port 5173"
+  ],
+  "templateId": "any"
+}
